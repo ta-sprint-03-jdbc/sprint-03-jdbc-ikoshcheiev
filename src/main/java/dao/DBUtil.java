@@ -28,7 +28,8 @@ public class DBUtil {
                 closeDataSource();
             }));
         } catch (Exception e) {
-            log.error("Failed to initialize connection pool: {}", e.getMessage());
+            log.error("Failed to initialize connection pool", e);
+            throw new RuntimeException("Failed to initialize datasource", e);
         }
     }
 

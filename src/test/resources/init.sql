@@ -33,11 +33,11 @@ create table club_child
     child_id int8 references child (id)
 );
 
--- Clean existing data
-truncate table club_child cascade;
-truncate table club restart identity cascade;
-truncate table child restart identity cascade;
-truncate table categories restart identity cascade;
+-- -- Clean existing data
+-- truncate table club_child cascade;
+-- truncate table club restart identity cascade;
+-- truncate table child restart identity cascade;
+-- truncate table categories restart identity cascade;
 
 -- Insert categories with descriptive names
 insert into categories (title, avatar)

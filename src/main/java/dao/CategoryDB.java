@@ -14,11 +14,13 @@ public class CategoryDB implements CategoryDAO, AutoCloseable {
 
     // SQL query constants
     private static final String SQL_SELECT_CATEGORY_BY_TITLE = "SELECT id, avatar, title FROM categories WHERE title = ?";
+    private static final String SQL_SELECT_CATEGORY_BY_ID = "SELECT id, avatar, title FROM categories WHERE id = ?";
     private static final String SQL_INSERT_CATEGORY = "INSERT INTO categories (avatar, title) VALUES (?, ?)";
     private static final String SQL_UPDATE_CATEGORY = "UPDATE categories SET avatar = ?, title = ? WHERE id = ?";
     private static final String SQL_DELETE_CATEGORY = "DELETE FROM categories WHERE id = ?";
     private static final String SQL_SELECT_CATEGORIES_BY_TITLE_PART = "SELECT id, avatar, title FROM categories WHERE LOWER(title) LIKE ?";
-    private static final String SQL_SELECT_CHILDREN_BY_CATEGORY = "SELECT DISTINCT c.id, c.first_name, c.last_name, c.birth_date FROM child c JOIN club_child cc ON c.id = cc.child_id JOIN club cl ON cc.club_id = cl.id WHERE cl.category_id = ?";
+    private static final String SQL_SELECT_CHILDREN_BY_CATEGORY = "SELECT DISTINCT c.id, c.first_name, c.last_name, c.birth_date " +
+            "FROM child c JOIN club_child cc ON c.id = cc.child_id JOIN club cl ON cc.club_id = cl.id WHERE cl.category_id = ?";
 
     private final Connection conn;
     private final boolean ownsConnection;
@@ -48,27 +50,13 @@ public class CategoryDB implements CategoryDAO, AutoCloseable {
 
     @Override
     public Category addCategory(Category category) throws SQLException {
-        if (category == null) {
-            log.warn("Attempted to add null category");
-            throw new IllegalArgumentException("Category cannot be null");
-        }
+        validateCategoryForCreate(category);
 
-        if (category.title() == null || category.title().trim().isEmpty()) {
-            log.warn("Attempted to add category with null or empty title");
-            throw new IllegalArgumentException("Category title cannot be null or empty");
-        }
+        Category existing = getCategoryByTitle(category.title());
+        if (existing != null) {
+            log.info("Found existing category with title: {}", category.title());
 
-        try (PreparedStatement pst = conn.prepareStatement(SQL_SELECT_CATEGORY_BY_TITLE)) {
-            pst.setString(1, category.title());
-            try (ResultSet rs = pst.executeQuery()) {
-                if (rs.next()) {
-                    Long id = rs.getLong("id");
-                    String avatar = rs.getString("avatar");
-                    String title = rs.getString("title");
-                    log.info("Found existing category with title: {}", category.title());
-                    return new Category(id, avatar, title);
-                }
-            }
+            return existing;
         }
 
         // Category doesn't exist, insert a new one
@@ -90,19 +78,11 @@ public class CategoryDB implements CategoryDAO, AutoCloseable {
 
     @Override
     public boolean updateCategory(Category category) throws SQLException {
-        if (category == null) {
-            log.warn("Attempted to update null category");
-            throw new IllegalArgumentException("Category cannot be null");
-        }
+        validateCategoryForUpdate(category);
 
         if (category.id() == null) {
             log.warn("Attempted to update category with null id");
             throw new IllegalArgumentException("Category ID cannot be null");
-        }
-
-        if (category.title() == null || category.title().trim().isEmpty()) {
-            log.warn("Attempted to update category with null or empty title");
-            throw new IllegalArgumentException("Category title cannot be null or empty");
         }
 
         try (PreparedStatement pst = conn.prepareStatement(SQL_UPDATE_CATEGORY)) {
@@ -142,11 +122,7 @@ public class CategoryDB implements CategoryDAO, AutoCloseable {
             statement.setString(1, "%" + titlePart.toLowerCase() + "%");
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    Long id = rs.getLong("id");
-                    String avatar = rs.getString("avatar");
-                    String title = rs.getString("title");
-                    Category category = new Category(id, avatar, title);
-                    categories.add(category);
+                    categories.add(mapCategory(rs));
                 }
             }
         }
@@ -180,4 +156,76 @@ public class CategoryDB implements CategoryDAO, AutoCloseable {
         return children;
     }
 
+    @Override
+    public Category getCategoryById(long categoryId) throws SQLException {
+        Category category = null;
+        try (PreparedStatement statement = conn.prepareStatement(SQL_SELECT_CATEGORY_BY_ID)) {
+            statement.setLong(1, categoryId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    category = mapCategory(rs);
+                }
+            }
+        }
+
+        if (category != null) {
+            log.info("Found category '{}' matching id: {}", category.title(), categoryId);
+        } else {
+            log.info("No category found for id: {}", categoryId);
+        }
+
+        return category;
+    }
+
+    @Override
+    public Category getCategoryByTitle(String title) throws SQLException {
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("Title cannot be null or empty");
+        }
+
+        Category category = null;
+        try (PreparedStatement statement = conn.prepareStatement(SQL_SELECT_CATEGORY_BY_TITLE)) {
+            statement.setString(1, title);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    category = mapCategory(rs);
+                }
+            }
+        }
+        log.info("Category lookup by title '{}' returned: {}", title, category);
+
+        return category;
+    }
+
+    private Category mapCategory(ResultSet rs) throws SQLException {
+        return new Category(
+                rs.getLong("id"),
+                rs.getString("avatar"),
+                rs.getString("title"));
+    }
+
+    private void validateCategoryForCreate(Category category) {
+        validateBaseCategory(category);
+    }
+
+    private void validateCategoryForUpdate(Category category) {
+        validateBaseCategory(category);
+
+        if (category.id() == null) {
+            log.warn("Attempted to update category with null id");
+            throw new IllegalArgumentException("Category ID cannot be null");
+        }
+    }
+
+    private void validateBaseCategory(Category category) {
+        if (category == null) {
+            log.warn("Attempted to add null category");
+            throw new IllegalArgumentException("Category cannot be null");
+        }
+
+        if (category.title() == null || category.title().isBlank()) {
+            log.warn("Attempted to add category with null or empty title");
+            throw new IllegalArgumentException("Category title cannot be null or empty");
+        }
+    }
 }

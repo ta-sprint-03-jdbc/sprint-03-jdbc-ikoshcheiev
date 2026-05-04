@@ -62,4 +62,24 @@ public interface CategoryDAO {
      * @throws IllegalArgumentException If categoryId is null
      */
     List<Child> findAllChildrenInCategory(Long categoryId) throws SQLException;
+
+    /**
+     * Retrieves a category by its id.
+     *
+     * @param categoryId category identifier
+     * @return matching category, or null if not found
+     * @throws SQLException if a database access error occurs
+     */
+    Category getCategoryById(long categoryId) throws SQLException;
+
+    /**
+     * Retrieves a category by its exact title.
+     *
+     * @param title category title
+     * @return matching category, or null if not found
+     * @throws SQLException if a database access error occurs
+     * @throws IllegalArgumentException if title is null or empty
+     */
+    Category getCategoryByTitle(String title) throws SQLException;
+
 }

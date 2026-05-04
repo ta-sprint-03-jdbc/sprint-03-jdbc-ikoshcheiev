@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import model.Child;
 
 import java.sql.*;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +17,8 @@ public class ChildDB implements ChildDAO, AutoCloseable {
     private static final String SQL_DELETE_CHILD = "DELETE FROM child WHERE id = ?;";
     private static final String SQL_SELECT_CHILDREN_BY_MIN_AGE = "SELECT id, first_name, last_name, birth_date FROM child WHERE EXTRACT(YEAR FROM AGE(birth_date)) >= ?;";
     private static final String SQL_SELECT_CHILDREN_WITHOUT_BIRTHDATE = "SELECT id, first_name, last_name, birth_date FROM child WHERE birth_date IS NULL;";
+    private static final String SQL_SELECT_CHILD_BY_ID = "SELECT id, first_name, last_name, birth_date FROM child WHERE id = ?;";
+    private static final String SQL_SELECT_ONE_CHILD_BY_ID = "SELECT 1 FROM child WHERE id = ?";
 
     private final Connection conn;
     private final boolean ownsConnection;
@@ -53,20 +54,7 @@ public class ChildDB implements ChildDAO, AutoCloseable {
 
     @Override
     public Child addChild(Child child) throws SQLException {
-        if (child == null) {
-            log.warn("Attempted to add null child");
-            throw new IllegalArgumentException("Child cannot be null");
-        }
-
-        if (child.firstName() == null || child.firstName().trim().isEmpty()) {
-            log.warn("Attempted to add child with null or empty first name");
-            throw new IllegalArgumentException("Child first name cannot be null or empty");
-        }
-
-        if (child.lastName() == null || child.lastName().trim().isEmpty()) {
-            log.warn("Attempted to add child with null or empty last name");
-            throw new IllegalArgumentException("Child last name cannot be null or empty");
-        }
+        validateChildForCreate(child);
 
         try (PreparedStatement pst = conn.prepareStatement(SQL_INSERT_CHILD, Statement.RETURN_GENERATED_KEYS)) {
             pst.setString(1, child.firstName());
@@ -91,25 +79,7 @@ public class ChildDB implements ChildDAO, AutoCloseable {
 
     @Override
     public boolean updateChild(Child child) throws SQLException {
-        if (child == null) {
-            log.warn("Attempted to update null child");
-            throw new IllegalArgumentException("Child cannot be null");
-        }
-
-        if (child.id() == null) {
-            log.warn("Attempted to update child with null id");
-            throw new IllegalArgumentException("Child ID cannot be null");
-        }
-
-        if (child.firstName() == null || child.firstName().trim().isEmpty()) {
-            log.warn("Attempted to update child with null or empty first name");
-            throw new IllegalArgumentException("Child first name cannot be null or empty");
-        }
-
-        if (child.lastName() == null || child.lastName().trim().isEmpty()) {
-            log.warn("Attempted to update child with null or empty last name");
-            throw new IllegalArgumentException("Child last name cannot be null or empty");
-        }
+        validateChildForUpdate(child);
 
         try (PreparedStatement pst = conn.prepareStatement(SQL_UPDATE_CHILD)) {
             pst.setString(1, child.firstName());
@@ -169,22 +139,88 @@ public class ChildDB implements ChildDAO, AutoCloseable {
         }
     }
 
-
-    private static List<Child> fromResultSetToChild(ResultSet rs) throws SQLException {
+    private List<Child> fromResultSetToChild(ResultSet rs) throws SQLException {
         List<Child> children = new ArrayList<>();
         while (rs.next()) {
-            Long id = rs.getLong("id");
-            String firstName = rs.getString("first_name");
-            String lastName = rs.getString("last_name");
-            LocalDate date = null;
-            Date birthDate = rs.getDate("birth_date");
-            if (birthDate != null) {
-                date = birthDate.toLocalDate();
-            }
-            var child = new Child(id, firstName, lastName, date);
-            children.add(child);
+            children.add(mapChild(rs));
         }
         return children;
+    }
+
+    @Override
+    public Child getChildById(long childId) throws SQLException {
+        Child child = null;
+
+        try (PreparedStatement statement = conn.prepareStatement(SQL_SELECT_CHILD_BY_ID)) {
+            statement.setLong(1, childId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    child = mapChild(rs);
+                }
+            }
+        }
+
+        if (child != null) {
+            log.info("Found child by id {}: {}", childId, child);
+        } else {
+            log.info("No child found for id: {}", childId);
+        }
+        return child;
+    }
+
+    @Override
+    public boolean existsById(long id) throws SQLException {
+        if (id <= 0) {
+            throw new IllegalArgumentException("Child ID must be positive");
+        }
+
+        try (PreparedStatement statement = conn.prepareStatement(SQL_SELECT_ONE_CHILD_BY_ID)) {
+            statement.setLong(1, id);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private Child mapChild(ResultSet rs) throws SQLException {
+        Date birthDate = rs.getDate("birth_date");
+
+        return new Child(
+                rs.getLong("id"),
+                rs.getString("first_name"),
+                rs.getString("last_name"),
+                birthDate != null ? birthDate.toLocalDate() : null
+        );
+    }
+
+    private void validateChildForCreate(Child child) {
+        validateChildBase(child);
+    }
+
+    private void validateChildForUpdate(Child child) {
+        validateChildBase(child);
+
+        if (child.id() == null) {
+            log.warn("Attempted to update child with null id");
+            throw new IllegalArgumentException("Child ID cannot be null");
+        }
+    }
+
+    private void validateChildBase(Child child) {
+        if (child == null) {
+            log.warn("Attempted to update null child");
+            throw new IllegalArgumentException("Child cannot be null");
+        }
+
+        if (child.firstName() == null || child.firstName().isBlank()) {
+            log.warn("Attempted to update child with null or empty first name");
+            throw new IllegalArgumentException("Child first name cannot be null or empty");
+        }
+
+        if (child.lastName() == null || child.lastName().isBlank()) {
+            log.warn("Attempted to update child with null or empty last name");
+            throw new IllegalArgumentException("Child last name cannot be null or empty");
+        }
     }
 
 }

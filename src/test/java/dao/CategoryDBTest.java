@@ -6,11 +6,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import utils.DBUtil;
 
 import java.io.IOException;
-import java.sql.*;
+import java.sql.SQLException;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -71,20 +75,11 @@ class CategoryDBTest {
 
         String updatedTitle = "Updated " + originalTitle;
         String updatedAvatar = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII";
-
         boolean updateResult = db.updateCategory(new Category(added.id(), updatedAvatar, updatedTitle));
-
         assertTrue(updateResult, "Update operation should return true when category is successfully updated");
 
-        String query = "SELECT title FROM categories WHERE id = ?";
-        try (Connection conn = utils.DBUtil.getConnection();
-             PreparedStatement pst = conn.prepareStatement(query)) {
-            pst.setLong(1, added.id());
-            try (ResultSet rs = pst.executeQuery()) {
-                assertTrue(rs.next(), "Updated category should exist in database");
-                assertEquals(updatedTitle, rs.getString("title"), "Category title should be updated in database");
-            }
-        }
+        String categoryTitle = db.getCategoryById(added.id()).title();
+        assertEquals(updatedTitle, categoryTitle, "Category title should be updated in database");
     }
 
     @Test
@@ -94,18 +89,59 @@ class CategoryDBTest {
         Category added = db.addCategory(new Category("data:image/png;base64,TEMP_AVATAR", uniqueTitle));
 
         boolean deleteResult = db.deleteCategory(added.id());
-
         assertTrue(deleteResult, "Delete operation should return true when category is successfully deleted");
 
-        String verifyQuery = "SELECT COUNT(*) FROM categories WHERE id = ?";
-        try (Connection conn = utils.DBUtil.getConnection();
-             PreparedStatement pst = conn.prepareStatement(verifyQuery)) {
-            pst.setLong(1, added.id());
-            try (ResultSet rs = pst.executeQuery()) {
-                rs.next();
-                assertEquals(0, rs.getInt(1), "Category should not exist in database after deletion");
-            }
-        }
+        Category categoryById = db.getCategoryById(added.id());
+        assertNull(categoryById, "Category title should be updated in database");
+    }
+
+    @Test
+    @DisplayName("Should throw IllegalArgumentException when deleting category with null ID")
+    void deleteCategoryShouldThrowExceptionForNullId() {
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> db.deleteCategory(null));
+
+        assertEquals("Category ID cannot be null", exception.getMessage());
+    }
+
+    static Stream<Arguments> invalidAddCategories() {
+        return Stream.of(
+                Arguments.of(null, "Category cannot be null"),
+                Arguments.of(new Category("avatar-url", null), "Category title cannot be null or empty"),
+                Arguments.of(new Category("avatar-url", ""), "Category title cannot be null or empty"),
+                Arguments.of(new Category("avatar-url", "   "), "Category title cannot be null or empty")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidAddCategories")
+    void addCategoryShouldThrowExceptionForNegativeData(Category category, String expectedMessage) {
+        Exception exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> db.addCategory(category)
+        );
+
+        assertEquals(expectedMessage, exception.getMessage());
+    }
+
+    static Stream<Arguments> invalidUpdateCategories() {
+        return Stream.of(
+                Arguments.of(null, "Category cannot be null"),
+                Arguments.of(new Category(null, "avatar-url", "Valid Title"), "Category ID cannot be null"),
+                Arguments.of(new Category(1L, "avatar-url", null), "Category title cannot be null or empty"),
+                Arguments.of(new Category(1L, "avatar-url", ""), "Category title cannot be null or empty"),
+                Arguments.of(new Category(1L, "avatar-url", "   "), "Category title cannot be null or empty")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidUpdateCategories")
+    void updateCategoryShouldThrowExceptionForNegativeData(Category category, String expectedMessage) {
+        Exception exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> db.updateCategory(category)
+        );
+
+        assertEquals(expectedMessage, exception.getMessage());
     }
 
     @Test
@@ -115,75 +151,6 @@ class CategoryDBTest {
 
         assertEquals(UNIQUE_CATEGORIES_COUNT, categories.size(),
                 "Search should find exactly " + UNIQUE_CATEGORIES_COUNT + " categories containing '" + UNIQUE_SEARCH_PART + "'");
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when adding null category")
-    void addCategoryShouldThrowExceptionForNullCategory() {
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> db.addCategory(null));
-
-        assertEquals("Category cannot be null", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when adding category with null title")
-    void addCategoryShouldThrowExceptionForNullTitle() {
-        Exception exception = assertThrows(IllegalArgumentException.class,
-                () -> db.addCategory(new Category("avatar-url", null)));
-
-        assertEquals("Category title cannot be null or empty", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when adding category with empty title")
-    void addCategoryShouldThrowExceptionForEmptyTitle() {
-        Exception exception = assertThrows(IllegalArgumentException.class,
-                () -> db.addCategory(new Category("avatar-url", "")));
-
-        assertEquals("Category title cannot be null or empty", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when updating null category")
-    void updateCategoryShouldThrowExceptionForNullCategory() {
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> db.updateCategory(null));
-
-        assertEquals("Category cannot be null", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when updating category with null ID")
-    void updateCategoryShouldThrowExceptionForNullId() {
-        Exception exception = assertThrows(IllegalArgumentException.class,
-                () -> db.updateCategory(new Category(null, "avatar-url", "Valid Title")));
-
-        assertEquals("Category ID cannot be null", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when updating category with null title")
-    void updateCategoryShouldThrowExceptionForNullTitle() {
-        Exception exception = assertThrows(IllegalArgumentException.class,
-                () -> db.updateCategory(new Category(1L, "avatar-url", null)));
-
-        assertEquals("Category title cannot be null or empty", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when updating category with empty title")
-    void updateCategoryShouldThrowExceptionForEmptyTitle() {
-        Exception exception = assertThrows(IllegalArgumentException.class,
-                () -> db.updateCategory(new Category(1L, "avatar-url", "")));
-
-        assertEquals("Category title cannot be null or empty", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Should throw IllegalArgumentException when deleting category with null ID")
-    void deleteCategoryShouldThrowExceptionForNullId() {
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> db.deleteCategory(null));
-
-        assertEquals("Category ID cannot be null", exception.getMessage());
     }
 
     @Test
@@ -207,19 +174,10 @@ class CategoryDBTest {
     @Test
     @DisplayName("Should find all children in category")
     void findAllChildrenInCategory() throws SQLException {
-        Long categoryId = null;
-        try (Connection conn = utils.DBUtil.getConnection();
-             PreparedStatement pst = conn.prepareStatement("SELECT id FROM categories WHERE title = ?")) {
-            pst.setString(1, SPORTS_CATEGORY_TITLE);
-            try (ResultSet rs = pst.executeQuery()) {
-                if (rs.next()) {
-                    categoryId = rs.getLong("id");
-                }
-            }
-        }
-        assertNotNull(categoryId, "Category '" + SPORTS_CATEGORY_TITLE + "' should exist");
+        Category categoryByTitle = db.getCategoryByTitle(SPORTS_CATEGORY_TITLE);
+        assertNotNull(categoryByTitle, "Category '" + SPORTS_CATEGORY_TITLE + "' should exist");
 
-        List<Child> children = db.findAllChildrenInCategory(categoryId);
+        List<Child> children = db.findAllChildrenInCategory(categoryByTitle.id());
 
         assertFalse(children.isEmpty(), "Category should have children");
         assertTrue(children.stream().anyMatch(c -> "Michael".equals(c.firstName())), "Should find Michael in category");

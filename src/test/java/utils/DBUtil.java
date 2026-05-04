@@ -98,7 +98,7 @@ public class DBUtil {
                                         + " Command successfully executed : "
                                         + builder.substring(
                                         0,
-                                        Math.min(builder.length(), 15))
+                                        Math.min(builder.length(), 30))
                                         + "...");
                         builder.setLength(0);
                     } catch (SQLException e) {
