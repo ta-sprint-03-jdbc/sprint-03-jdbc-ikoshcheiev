@@ -105,16 +105,16 @@ class CategoryDBTest {
 
     static Stream<Arguments> invalidAddCategories() {
         return Stream.of(
-                Arguments.of(null, "Category cannot be null"),
-                Arguments.of(new Category("avatar-url", null), "Category title cannot be null or empty"),
-                Arguments.of(new Category("avatar-url", ""), "Category title cannot be null or empty"),
-                Arguments.of(new Category("avatar-url", "   "), "Category title cannot be null or empty")
+                Arguments.of("null category", null, "Category cannot be null"),
+                Arguments.of("null title", new Category("avatar-url", null), "Category title cannot be null or empty"),
+                Arguments.of("empty title", new Category("avatar-url", ""), "Category title cannot be null or empty"),
+                Arguments.of("spaces title", new Category("avatar-url", "   "), "Category title cannot be null or empty")
         );
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("invalidAddCategories")
-    void addCategoryShouldThrowExceptionForNegativeData(Category category, String expectedMessage) {
+    void addCategoryShouldThrowExceptionForNegativeData(String caseName, Category category, String expectedMessage) {
         Exception exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> db.addCategory(category)
@@ -125,17 +125,17 @@ class CategoryDBTest {
 
     static Stream<Arguments> invalidUpdateCategories() {
         return Stream.of(
-                Arguments.of(null, "Category cannot be null"),
-                Arguments.of(new Category(null, "avatar-url", "Valid Title"), "Category ID cannot be null"),
-                Arguments.of(new Category(1L, "avatar-url", null), "Category title cannot be null or empty"),
-                Arguments.of(new Category(1L, "avatar-url", ""), "Category title cannot be null or empty"),
-                Arguments.of(new Category(1L, "avatar-url", "   "), "Category title cannot be null or empty")
+                Arguments.of("null category", null, "Category cannot be null"),
+                Arguments.of("null id", new Category(null, "avatar-url", "Valid Title"), "Category ID cannot be null"),
+                Arguments.of("null title", new Category(1L, "avatar-url", null), "Category title cannot be null or empty"),
+                Arguments.of("empty title", new Category(1L, "avatar-url", ""), "Category title cannot be null or empty"),
+                Arguments.of("spaces title", new Category(1L, "avatar-url", "   "), "Category title cannot be null or empty")
         );
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("invalidUpdateCategories")
-    void updateCategoryShouldThrowExceptionForNegativeData(Category category, String expectedMessage) {
+    void updateCategoryShouldThrowExceptionForNegativeData(String caseName, Category category, String expectedMessage) {
         Exception exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> db.updateCategory(category)
